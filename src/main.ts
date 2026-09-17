@@ -19,6 +19,8 @@ const modes: { id: CheckInMode; label: string }[] = [
   { id: 'hiking', label: 'Hiking' }
 ]
 
+let stopTickInterval: ReturnType<typeof setInterval> | null = null
+
 function statusLabel(status: CheckInState['status']): string {
   switch (status) {
     case 'ok':
@@ -30,9 +32,46 @@ function statusLabel(status: CheckInState['status']): string {
   }
 }
 
+/** Seconds remaining on the active planned stop, floored at 0. */
+function stopSecondsRemaining(): number {
+  if (!state.activeStop) return 0
+  const totalMs = state.activeStop.durationMinutes * 60 * 1000
+  const elapsedMs = Date.now() - state.activeStop.startedAt
+  return Math.max(0, Math.ceil((totalMs - elapsedMs) / 1000))
+}
+
+function formatCountdown(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+function startStop(durationMinutes: 15 | 30) {
+  state.activeStop = { startedAt: Date.now(), durationMinutes }
+  render()
+}
+
+/** Manual stand-in for "movement started again" until real motion sensing is wired up. */
+function endStop() {
+  state.activeStop = null
+  render()
+}
+
 function render() {
   const app = document.querySelector<HTMLDivElement>('#app')
   if (!app) return
+
+  if (stopTickInterval) {
+    clearInterval(stopTickInterval)
+    stopTickInterval = null
+  }
+
+  const secondsRemaining = stopSecondsRemaining()
+  if (state.activeStop && secondsRemaining === 0) {
+    // Stop window ran out with no movement — falls back to the normal
+    // no-movement flow (not implemented yet, so just clear it for now).
+    state.activeStop = null
+  }
 
   app.innerHTML = `
     <header class="app-header">
@@ -61,17 +100,23 @@ function render() {
 
     <section ${state.mode === 'travelling' ? '' : 'hidden'}>
       <div class="status-label" style="margin-bottom: 8px;">Planned stop</div>
-      <div class="stop-row">
-        <button data-stop="15" ${state.activeStop ? 'disabled' : ''}>15 min</button>
-        <button data-stop="30" ${state.activeStop ? 'disabled' : ''}>30 min</button>
-      </div>
-      <p class="note">
-        ${
-          state.activeStop
-            ? `Stop active — pauses the no-movement check for ${state.activeStop.durationMinutes} min, or until you start moving again.`
-            : 'Tag a rest, food, or petrol stop so it doesn’t trigger a false alert.'
-        }
-      </p>
+      ${
+        state.activeStop
+          ? `
+        <div class="stop-timer">
+          <span class="stop-timer-value">${formatCountdown(secondsRemaining)}</span>
+          <span class="stop-timer-label">remaining — no-movement check is paused</span>
+        </div>
+        <button class="stop-end-btn" data-action="end-stop">I'm moving again</button>
+      `
+          : `
+        <div class="stop-row">
+          <button data-stop="15">15 min</button>
+          <button data-stop="30">30 min</button>
+        </div>
+        <p class="note">Tag a rest, food, or petrol stop so it doesn’t trigger a false alert.</p>
+      `
+      }
     </section>
 
     <section class="actions">
@@ -95,11 +140,12 @@ function render() {
 
   app.querySelectorAll<HTMLButtonElement>('[data-stop]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const durationMinutes = Number(btn.dataset.stop) as 15 | 30
-      state.activeStop = { startedAt: Date.now(), durationMinutes }
-      render()
+      startStop(Number(btn.dataset.stop) as 15 | 30)
     })
   })
+
+  const endStopBtn = app.querySelector<HTMLButtonElement>('[data-action="end-stop"]')
+  endStopBtn?.addEventListener('click', endStop)
 
   app.querySelectorAll<HTMLButtonElement>('[data-status]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -109,6 +155,10 @@ function render() {
       render()
     })
   })
+
+  if (state.activeStop) {
+    stopTickInterval = setInterval(render, 1000)
+  }
 }
 
 render()
