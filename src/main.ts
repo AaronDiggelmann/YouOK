@@ -13,10 +13,16 @@ const state: CheckInState = {
   status: 'ok'
 }
 
-const modes: { id: CheckInMode; label: string }[] = [
-  { id: 'default', label: 'Default' },
-  { id: 'travelling', label: 'Travelling' },
-  { id: 'hiking', label: 'Hiking' }
+const icons = {
+  home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>`,
+  car: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-3.5L6 7h12l2 5.5V16"/><path d="M4 16h16"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/></svg>`,
+  mountain: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 19 6-10 4 6 2-3 6 7Z"/></svg>`
+}
+
+const modes: { id: CheckInMode; label: string; icon: string }[] = [
+  { id: 'default', label: 'Default', icon: icons.home },
+  { id: 'travelling', label: 'Travelling', icon: icons.car },
+  { id: 'hiking', label: 'Hiking', icon: icons.mountain }
 ]
 
 let stopTickInterval: ReturnType<typeof setInterval> | null = null
@@ -26,10 +32,19 @@ function statusLabel(status: CheckInState['status']): string {
     case 'ok':
       return "You're OK"
     case 'concerned':
-      return "OK, but concerned"
+      return 'OK, but concerned'
     case 'not_ok':
       return 'Not OK — alert sent'
   }
+}
+
+function timeAgo(ms: number): string {
+  const seconds = Math.round((Date.now() - ms) / 1000)
+  if (seconds < 45) return 'just now'
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  return `${hours} hr ago`
 }
 
 /** Seconds remaining on the active planned stop, floored at 0. */
@@ -54,8 +69,12 @@ function startStop(durationMinutes: 15 | 30) {
 /** Manual stand-in for "movement started again" until real motion sensing is wired up. */
 function endStop() {
   state.activeStop = null
+  state.lastMovementAt = Date.now()
   render()
 }
+
+const RING_RADIUS = 38
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
 function render() {
   const app = document.querySelector<HTMLDivElement>('#app')
@@ -73,39 +92,69 @@ function render() {
     state.activeStop = null
   }
 
+  const fractionRemaining = state.activeStop
+    ? secondsRemaining / (state.activeStop.durationMinutes * 60)
+    : 1
+  const dashOffset = RING_CIRCUMFERENCE * (1 - fractionRemaining)
+
   app.innerHTML = `
     <header class="app-header">
-      <img src="/icons/icon-192.png" alt="" />
-      <h1>You OK</h1>
+      <div class="icon-badge"><img src="/icons/icon-192.png" alt="" /></div>
+      <div>
+        <h1>You OK</h1>
+        <p class="tagline">Friend-group safety check-ins</p>
+      </div>
     </header>
 
-    <section class="status-card">
-      <span class="status-label">Status</span>
-      <span class="status-value">${statusLabel(state.status)}</span>
+    <section class="status-card ${state.status}">
+      <div class="status-dot-wrap ${state.status}">
+        <span class="ring"></span>
+        <span class="dot"></span>
+      </div>
+      <div>
+        <div class="status-label">Status</div>
+        <div class="status-value">${statusLabel(state.status)}</div>
+        <div class="status-time">Checked in ${timeAgo(state.lastMovementAt)}</div>
+      </div>
     </section>
 
     <section>
-      <div class="status-label" style="margin-bottom: 8px;">Mode</div>
+      <p class="section-label">Mode</p>
       <div class="mode-row">
         ${modes
           .map(
             (m) => `
           <button class="mode-chip" data-mode="${m.id}" aria-pressed="${m.id === state.mode}">
-            ${m.label}
+            ${m.icon}
+            <span>${m.label}</span>
           </button>`
           )
           .join('')}
       </div>
     </section>
 
-    <section ${state.mode === 'travelling' ? '' : 'hidden'}>
-      <div class="status-label" style="margin-bottom: 8px;">Planned stop</div>
+    <section class="stop-card" ${state.mode === 'travelling' ? '' : 'hidden'}>
+      <p class="section-label" style="margin-bottom: 14px;">Planned stop</p>
       ${
         state.activeStop
           ? `
         <div class="stop-timer">
-          <span class="stop-timer-value">${formatCountdown(secondsRemaining)}</span>
-          <span class="stop-timer-label">remaining — no-movement check is paused</span>
+          <div class="timer-ring-wrap">
+            <svg viewBox="0 0 92 92">
+              <circle class="timer-ring-track" cx="46" cy="46" r="${RING_RADIUS}" />
+              <circle
+                class="timer-ring-progress"
+                cx="46" cy="46" r="${RING_RADIUS}"
+                stroke-dasharray="${RING_CIRCUMFERENCE}"
+                stroke-dashoffset="${dashOffset}"
+              />
+            </svg>
+            <div class="timer-ring-value">${formatCountdown(secondsRemaining)}</div>
+          </div>
+          <div class="stop-timer-copy">
+            <p class="stop-timer-title">No-movement check paused</p>
+            <p class="stop-timer-subtitle">Resumes automatically when the timer ends, or as soon as you're moving again.</p>
+          </div>
         </div>
         <button class="stop-end-btn" data-action="end-stop">I'm moving again</button>
       `
@@ -120,11 +169,15 @@ function render() {
     </section>
 
     <section class="actions">
-      <button class="btn-concerned" data-status="concerned">I'm OK, but concerned</button>
-      <button class="btn-not-ok" data-status="not_ok">Not OK</button>
+      <button class="btn-concerned" data-status="concerned">
+        <span>I'm OK, but concerned</span>
+      </button>
+      <button class="btn-not-ok" data-status="not_ok">
+        <span>Not OK</span>
+      </button>
     </section>
 
-    <p class="note">
+    <p class="footnote">
       Movement detection, live location, and the group check-in thread aren't wired up yet —
       this is the app shell to build those features into next.
     </p>
@@ -152,6 +205,7 @@ function render() {
       // TODO: wire up to the backend once the Supabase project exists —
       // this should write a GroupUpdate with current coordinates and status.
       state.status = btn.dataset.status as CheckInState['status']
+      state.lastMovementAt = Date.now()
       render()
     })
   })
