@@ -8,8 +8,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/favicon-16.png', 'icons/favicon-32.png'],
       manifest: {
-        name: 'You OK',
-        short_name: 'You OK',
+        name: "I'm OK",
+        short_name: "I'm OK",
         description: 'Friend-group safety check-ins — automatic movement-based alerts with location sharing.',
         theme_color: '#2563eb',
         background_color: '#ffffff',

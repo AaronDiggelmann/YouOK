@@ -3,7 +3,7 @@ import type { CheckInMode, CheckInState } from './types'
 
 // This is an initial app-shell scaffold: the UI wiring below is real, but the
 // movement/GPS sensing, backend sync, and group chat are not implemented yet.
-// See the "You OK" project spec doc for the full feature list and the
+// See the "I'm OK" project spec doc for the full feature list and the
 // open questions still to resolve.
 
 const state: CheckInState = {
@@ -30,7 +30,7 @@ let stopTickInterval: ReturnType<typeof setInterval> | null = null
 function statusLabel(status: CheckInState['status']): string {
   switch (status) {
     case 'ok':
-      return "You're OK"
+      return "I'm OK"
     case 'concerned':
       return 'OK, but concerned'
     case 'not_ok':
@@ -101,7 +101,7 @@ function render() {
     <header class="app-header">
       <div class="icon-badge"><img src="/icons/icon-192.png" alt="" /></div>
       <div>
-        <h1>You OK</h1>
+        <h1>I'm OK</h1>
         <p class="tagline">Friend-group safety check-ins</p>
       </div>
     </header>

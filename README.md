@@ -1,7 +1,7 @@
-# You OK
+# I'm OK
 
 Friend-group safety check-in PWA. Full feature spec, open questions, and
-architecture decisions live in the "You OK" Claude project doc
+architecture decisions live in the "I'm OK" Claude project doc
 (`you-ok-spec.md`) — read that first.
 
 ## Stack
